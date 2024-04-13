@@ -49,6 +49,7 @@ func (s *PostgresStore) CreateAccountTable() error {
 		balance SERIAL,
 		created_at TIMESTAMP
 	)`
+	// ADD is_deleted for soft delete
 
 	_, err := s.DB.Exec(query)
 
@@ -56,7 +57,25 @@ func (s *PostgresStore) CreateAccountTable() error {
 }
 
 func (s *PostgresStore) GetAccountByID(id int) (*Account, error) {
-	return nil, nil
+	query := `SELECT * FROM Accounts WHERE id = $1`
+	rows, err := s.DB.Query(query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	account := new(Account)
+	if rows.Next() {
+		account, err = scanAccount(rows)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		// No rows returned
+		return nil, fmt.Errorf("account %d not found", id)
+	}
+
+	return account, nil
 }
 
 func (s *PostgresStore) GetAccounts() ([]*Account, error) {
@@ -64,20 +83,11 @@ func (s *PostgresStore) GetAccounts() ([]*Account, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 
 	accounts := []*Account{}
 	for rows.Next() {
-		account := new(Account)
-
-		err := rows.Scan(
-			&account.ID,
-			&account.FirstName,
-			&account.LastName,
-			&account.Number,
-			&account.Balance,
-			&account.CreatedAt,
-		)
-
+		account, err := scanAccount(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -109,5 +119,26 @@ func (s *PostgresStore) UpdateAccount(account *Account) error {
 }
 
 func (s *PostgresStore) DeleteAcccount(id int) error {
-	return nil
+	query := `DELETE from Accounts WHERE id = $1`
+	_, err := s.DB.Query(query, id)
+	return err
+}
+
+// *********helpers***********
+func scanAccount(rows *sql.Rows) (*Account, error) {
+	account := new(Account)
+
+	err := rows.Scan(
+		&account.ID,
+		&account.FirstName,
+		&account.LastName,
+		&account.Number,
+		&account.Balance,
+		&account.CreatedAt,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	return account, err
 }
